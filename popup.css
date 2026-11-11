@@ -150,6 +150,43 @@ body::-webkit-scrollbar-track {
   gap: 8px;
 }
 
+.kind-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 3px;
+  border-radius: 9px;
+  background: #f1f5f9;
+}
+
+.kind-tab {
+  flex: 1;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kind-tab:hover {
+  color: #334155;
+}
+
+.kind-tab.active {
+  background: #fff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.kind-tab[data-kind="audio"].active {
+  color: #7c3aed;
+}
+
 input[type="text"] {
   width: 100%;
   margin: 0;
@@ -270,6 +307,22 @@ input[type="text"]:focus {
   white-space: nowrap;
 }
 
+.rule-badge {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rule-badge.audio {
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+
 .rule-count.on {
   background: #dcfce7;
   color: #15803d;
@@ -327,6 +380,131 @@ input[type="text"]:focus {
   padding: 6px 9px;
   border-radius: 7px;
   font-size: 12px;
+}
+
+.field .pick-btn {
+  flex: none;
+  padding: 6px 9px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+}
+
+.field .pick-btn:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+/* ---------- 语音识别配置 ---------- */
+
+.asr-config {
+  margin: 4px 12px 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.asr-config summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.asr-config summary::-webkit-details-marker {
+  display: none;
+}
+
+.asr-config summary::before {
+  content: "▸";
+  color: #94a3b8;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.asr-config[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.asr-title {
+  flex: 1;
+}
+
+.asr-status {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.asr-status.on {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.asr-status.off {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.asr-body {
+  padding: 0 12px 12px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.asr-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.asr-field label {
+  flex: none;
+  width: 60px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.asr-field input[type="text"],
+.asr-field input[type="password"],
+.asr-field select {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.asr-field input:focus,
+.asr-field select:focus {
+  border-color: #3b82f6;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.asr-tip {
+  margin: 9px 0 0;
+  color: #94a3b8;
+  font-size: 10.5px;
+  line-height: 1.55;
 }
 
 /* ---------- 空状态 ---------- */

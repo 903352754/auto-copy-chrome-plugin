@@ -44,6 +44,7 @@
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
     }
     textarea { min-height: 80px; resize: vertical; }
+    audio { width: 100%; margin-top: 4px; margin-bottom: 28px; }
     .row { display: flex; gap: 12px; }
     .row > div { flex: 1; }
     .hint {
@@ -77,10 +78,10 @@
 <body>
   <main>
     <h1>快速复制助手 · 测试页</h1>
-    <p class="sub">安装插件后，在弹窗中添加下面的类名即可看到「快速复制」按钮。</p>
+    <p class="sub">安装插件后，在弹窗中添加下面的 XPath 即可看到「快速复制」或「识别语音」按钮。</p>
 
     <div class="card">
-      <h2>示例 1：源类名 price-input → 目标 #remark</h2>
+      <h2>示例 1：源 XPath → 目标 XPath</h2>
 
       <div class="row">
         <div>
@@ -97,7 +98,7 @@
       <textarea id="remark" placeholder="点击价格下方的「快速复制」后会填入这里"></textarea>
 
       <div class="hint">
-        在插件里添加规则：源填 <code>price-input</code>，目标填 <code>#remark</code>，然后在价格输入框下方点击「快速复制」。
+        在插件里添加规则：源填 <code>//input[@class="price-input"]</code>，目标填 <code>//textarea[@id="remark"]</code>，然后在价格输入框下方点击「快速复制」。
       </div>
     </div>
 
@@ -109,7 +110,21 @@
       <label for="dynamic-target">动态目标输入框（id = dynamic-target）</label>
       <input type="text" id="dynamic-target" placeholder="动态内容会填到这里">
       <div class="hint">
-        动态输入框的类名是 <code>dynamic-input</code>，目标选择器 <code>#dynamic-target</code>。
+        源 XPath 填 <code>//input[@class="dynamic-input"]</code>，目标 XPath 填 <code>//input[@id="dynamic-target"]</code>。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>示例 3：audio 播放器 → 语音识别填入</h2>
+      <p class="sub" style="margin-bottom:12px">
+        先在弹窗的「腾讯云语音识别配置」里填写 AppID / SecretID / SecretKey。
+      </p>
+      <label>待识别音频（id = speech-player）</label>
+      <audio id="speech-player" src="tts-mimo_default-1794368687440.mp3" controls></audio>
+      <label for="asr-result">识别结果（id = asr-result）</label>
+      <textarea id="asr-result" placeholder="点击音频下方的「识别语音」后会填入这里"></textarea>
+      <div class="hint">
+        在弹窗里切到「识别语音」：源填 <code>//audio[@id="speech-player"]</code>，目标填 <code>//textarea[@id="asr-result"]</code>。
       </div>
     </div>
   </main>

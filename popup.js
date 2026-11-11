@@ -6,10 +6,16 @@ let rules = [];
 let enabled = true;
 let stats = {};
 let pickedId = null;
+let addKind = 'input';
+
+let asrConfig = { appId: '', secretId: '', secretKey: '', engineType: '16k_zh' };
 
 let saveTimer = 0;
 let statTimer = 0;
 let toastTimer = 0;
+let asrTimer = 0;
+
+const ASR_KEY = 'qc_asr_config';
 
 let ui = {};
 
@@ -21,21 +27,39 @@ async function init() {
     source: document.getElementById('new-source'),
     target: document.getElementById('new-target'),
     addBtn: document.getElementById('add-btn'),
+    addTabs: Array.from(document.querySelectorAll('.kind-tab')),
     list: document.getElementById('list'),
     summary: document.getElementById('stat-summary'),
-    toast: document.getElementById('toast')
+    toast: document.getElementById('toast'),
+    asrConfig: document.getElementById('asr-config'),
+    asrStatus: document.getElementById('asr-status'),
+    asrAppId: document.getElementById('asr-appid'),
+    asrSecretId: document.getElementById('asr-secretid'),
+    asrSecretKey: document.getElementById('asr-secretkey'),
+    asrEngine: document.getElementById('asr-engine')
   };
 
   const data = await storage.getSync({ qc_rules: [], qc_enabled: true });
   rules = normalizeRules(data.qc_rules);
   enabled = data.qc_enabled !== false;
 
+  await loadAsrConfig();
   await applyPendingPick();
 
   ui.master.checked = enabled;
   bindEvents();
+  setAddKind('input', true);
   renderList();
   refreshStats();
+
+  // 有语音规则但没有配置密钥时，直接展开配置面板提醒
+  if (rules.some((r) => ruleKind(r) === 'audio') && !isAsrConfigured()) {
+    ui.asrConfig.open = true;
+  }
+}
+
+function ruleKind(rule) {
+  return rule && rule.kind === 'audio' ? 'audio' : 'input';
 }
 
 function normalizeRules(raw) {
@@ -44,6 +68,7 @@ function normalizeRules(raw) {
     .filter((item) => item && typeof item === 'object' && typeof item.source === 'string')
     .map((item) => ({
       id: item.id || newId(),
+      kind: item.kind === 'audio' ? 'audio' : 'input',
       source: item.source,
       target: typeof item.target === 'string' ? item.target : '',
       enabled: item.enabled !== false
@@ -94,15 +119,95 @@ const storage = {
         resolve();
       }
     });
+  },
+  setLocal(value) {
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.storage.local.set(value, () => {
+          const err = chrome.runtime.lastError;
+          if (err) reject(new Error(err.message));
+          else resolve();
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
   }
 };
+
+/* ---------- 腾讯云语音识别配置 ---------- */
+
+function normalizeAsrConfig(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  return {
+    appId: String(source.appId || '').trim(),
+    secretId: String(source.secretId || '').trim(),
+    secretKey: String(source.secretKey || '').trim(),
+    engineType: String(source.engineType || '16k_zh').trim() || '16k_zh'
+  };
+}
+
+function isAsrConfigured() {
+  return !!(asrConfig.appId && asrConfig.secretId && asrConfig.secretKey);
+}
+
+async function loadAsrConfig() {
+  const data = await storage.getLocal(ASR_KEY);
+  asrConfig = normalizeAsrConfig(data[ASR_KEY]);
+
+  ui.asrAppId.value = asrConfig.appId;
+  ui.asrSecretId.value = asrConfig.secretId;
+  ui.asrSecretKey.value = asrConfig.secretKey;
+
+  const engines = Array.from(ui.asrEngine.options).map((option) => option.value);
+  if (!engines.includes(asrConfig.engineType)) asrConfig.engineType = '16k_zh';
+  ui.asrEngine.value = asrConfig.engineType;
+
+  updateAsrStatus();
+}
+
+function updateAsrStatus() {
+  if (!ui.asrStatus) return;
+  const configured = isAsrConfigured();
+  ui.asrStatus.textContent = configured ? '已配置' : '未配置';
+  ui.asrStatus.className = 'asr-status ' + (configured ? 'on' : 'off');
+}
+
+function readAsrConfigFromUi() {
+  return normalizeAsrConfig({
+    appId: ui.asrAppId.value,
+    secretId: ui.asrSecretId.value,
+    secretKey: ui.asrSecretKey.value,
+    engineType: ui.asrEngine.value
+  });
+}
+
+function scheduleAsrSave() {
+  clearTimeout(asrTimer);
+  asrTimer = setTimeout(saveAsrConfig, 400);
+}
+
+async function saveAsrConfig() {
+  clearTimeout(asrTimer);
+  asrTimer = 0;
+
+  asrConfig = readAsrConfigFromUi();
+  updateAsrStatus();
+
+  try {
+    await storage.setLocal({ [ASR_KEY]: asrConfig });
+  } catch (e) {
+    toast('语音识别配置保存失败，请重试');
+  }
+}
 
 /* ---------- 拾取结果回填 ---------- */
 
 async function applyPendingPick() {
   const data = await storage.getLocal('qc_pending_pick');
   const pending = data.qc_pending_pick;
-  if (!pending || !pending.selector) return;
+  const xpath = pending && (pending.xpath || pending.selector);
+  if (!xpath) return;
 
   await storage.removeLocal('qc_pending_pick');
 
@@ -112,11 +217,12 @@ async function applyPendingPick() {
   const rule = rules.find((r) => r.id === pending.ruleId);
   if (!rule) return;
 
-  rule.target = pending.selector;
+  const field = pending.field === 'source' ? 'source' : 'target';
+  rule[field] = xpath;
   await saveNow();
 
   pickedId = rule.id;
-  setTimeout(() => toast('已填入拾取到的目标选择器'), 80);
+  setTimeout(() => toast('已填入拾取到的 XPath'), 80);
   scheduleStats(700);
 }
 
@@ -138,7 +244,7 @@ function renderList() {
 
     const line2 = document.createElement('p');
     line2.className = 'empty-sub';
-    line2.textContent = '在上方添加源类名和目标选择器';
+    line2.textContent = '在上方选择「快速复制」或「识别语音」，再添加 XPath';
 
     empty.append(icon, line1, line2);
     ui.list.appendChild(empty);
@@ -165,6 +271,8 @@ function renderList() {
 }
 
 function createRow(rule) {
+  const isAudio = ruleKind(rule) === 'audio';
+
   const row = document.createElement('div');
   row.className = 'rule';
   row.dataset.id = rule.id;
@@ -186,17 +294,15 @@ function createRow(rule) {
 
   switchLabel.append(toggle, slider);
 
+  const badge = document.createElement('span');
+  badge.className = 'rule-badge' + (isAudio ? ' audio' : '');
+  badge.textContent = isAudio ? '语音' : '复制';
+
   const count = document.createElement('span');
   count.className = 'rule-count';
 
   const spacer = document.createElement('span');
   spacer.className = 'spacer';
-
-  const pickBtn = document.createElement('button');
-  pickBtn.type = 'button';
-  pickBtn.className = 'pick-btn';
-  pickBtn.textContent = '拾取';
-  pickBtn.title = '在页面上点选目标输入框';
 
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
@@ -204,19 +310,26 @@ function createRow(rule) {
   delBtn.textContent = '✕';
   delBtn.title = '删除规则';
 
-  top.append(switchLabel, count, spacer, pickBtn, delBtn);
+  top.append(switchLabel, badge, count, spacer, delBtn);
 
   row.append(
     top,
-    createField('源', 'source', rule.source, '类名或 CSS 选择器'),
-    createField('目标', 'target', rule.target, '目标输入框选择器')
+    createField(
+      isAudio ? '音频' : '源',
+      'source',
+      rule.source,
+      isAudio ? "audio XPath，如 //audio[@id='player']" : "XPath，如 //input[@class='price-input']",
+      'source',
+      isAudio ? 'audio' : 'input'
+    ),
+    createField('目标', 'target', rule.target, "XPath，如 //textarea[@id='remark']", 'target', 'input')
   );
 
   updateRowCount(row, rule);
   return row;
 }
 
-function createField(labelText, className, value, placeholder) {
+function createField(labelText, className, value, placeholder, fieldName, pickKind) {
   const field = document.createElement('div');
   field.className = 'field';
 
@@ -232,7 +345,19 @@ function createField(labelText, className, value, placeholder) {
   input.spellcheck = false;
   input.autocomplete = 'off';
 
-  field.append(label, input);
+  const pickBtn = document.createElement('button');
+  pickBtn.type = 'button';
+  pickBtn.className = 'pick-btn';
+  pickBtn.dataset.field = fieldName;
+  pickBtn.textContent = '拾取';
+  pickBtn.title =
+    pickKind === 'audio'
+      ? '在页面上点选 audio 播放器'
+      : fieldName === 'source'
+        ? '在页面上点选源输入框'
+        : '在页面上点选目标输入框';
+
+  field.append(label, input, pickBtn);
   return field;
 }
 
@@ -257,6 +382,12 @@ function updateRowCount(row, rule) {
 
   if (rule.enabled === false) {
     el.textContent = '已停用';
+    el.className = 'rule-count off';
+    return;
+  }
+
+  if (!String(rule.source || '').trim()) {
+    el.textContent = '未设置源';
     el.className = 'rule-count off';
     return;
   }
@@ -300,7 +431,7 @@ async function refreshStats() {
     const res = await sendToTab(tab.id, { type: 'QC_STATS' });
     stats = (res && res.stats) || {};
     const total = Object.keys(stats).reduce((sum, key) => sum + (Number(stats[key]) || 0), 0);
-    setSummary(total ? '本页共 ' + total + ' 个匹配输入框' : '本页暂无匹配输入框');
+    setSummary(total ? '本页共 ' + total + ' 个匹配元素' : '本页暂无匹配元素');
   } catch (e) {
     stats = {};
     setSummary('请刷新页面后重试');
@@ -319,20 +450,34 @@ function scheduleStats(delay = 600) {
 async function addRule() {
   const source = ui.source.value.trim();
   const target = ui.target.value.trim();
+  const isAudio = addKind === 'audio';
 
-  if (!source) {
-    toast('请先填写源输入框的类名或选择器');
+  if (!source && !target) {
+    rules.push({ id: newId(), kind: addKind, source: '', target: '', enabled: true });
     ui.source.focus();
+    renderList();
+    await saveNow();
+    scheduleStats();
+    if (isAudio && !isAsrConfigured()) {
+      ui.asrConfig.open = true;
+      toast('已添加空语音规则，请先填写腾讯云语音识别配置');
+    } else {
+      toast(
+        isAudio
+          ? '已添加空语音规则，点「拾取」选择 audio 播放器和填入位置'
+          : '已添加空规则，点字段右侧的「拾取」选择输入框'
+      );
+    }
     return;
   }
 
-  if (rules.some((r) => r.source === source)) {
+  if (source && rules.some((r) => r.source === source && ruleKind(r) === addKind)) {
     toast('已存在相同的源规则');
     ui.source.focus();
     return;
   }
 
-  rules.push({ id: newId(), source, target, enabled: true });
+  rules.push({ id: newId(), kind: addKind, source, target, enabled: true });
 
   ui.source.value = '';
   ui.target.value = '';
@@ -342,7 +487,12 @@ async function addRule() {
   await saveNow();
   scheduleStats();
 
-  toast(target ? '规则已添加' : '规则已添加，可点「拾取」设置目标');
+  if (isAudio && !isAsrConfigured()) {
+    ui.asrConfig.open = true;
+    toast('语音规则已添加，请先填写腾讯云语音识别配置');
+  } else {
+    toast(target ? '规则已添加' : '规则已添加，可点「拾取」设置目标');
+  }
 }
 
 async function deleteRule(id) {
@@ -356,7 +506,7 @@ async function deleteRule(id) {
   toast(removed ? '已删除：' + removed.source : '规则已删除');
 }
 
-async function pickTarget(id) {
+async function pickField(id, field, kind) {
   await saveNow();
 
   const tab = await getActiveTab();
@@ -371,15 +521,44 @@ async function pickTarget(id) {
     return;
   }
 
+  const fieldName = field === 'source' ? 'source' : 'target';
+  const pickKind = fieldName === 'source' && kind === 'audio' ? 'audio' : 'input';
+
   try {
-    await sendToTab(tab.id, { type: 'QC_START_PICK', ruleId: id });
+    await sendToTab(tab.id, { type: 'QC_START_PICK', ruleId: id, field: fieldName, kind: pickKind });
   } catch (e) {
     toast('无法连接页面，请刷新网页后重试');
     return;
   }
 
-  toast('已进入拾取模式，点击页面上的目标输入框');
+  toast(
+    pickKind === 'audio'
+      ? '已进入拾取模式，点击页面上的 audio 播放器'
+      : fieldName === 'source'
+        ? '已进入拾取模式，点击页面上的源输入框'
+        : '已进入拾取模式，点击页面上的目标输入框'
+  );
   setTimeout(() => window.close(), 350);
+}
+
+function setAddKind(kind, silent) {
+  addKind = kind === 'audio' ? 'audio' : 'input';
+
+  for (const tab of ui.addTabs) {
+    const active = tab.dataset.kind === addKind;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  }
+
+  ui.source.placeholder =
+    addKind === 'audio'
+      ? "audio XPath，如 //audio[@id='player']"
+      : "源 XPath，如 //input[@class='price-input']";
+  ui.addBtn.textContent = addKind === 'audio' ? '＋ 添加语音规则' : '＋ 添加规则';
+
+  if (addKind === 'audio' && !isAsrConfigured()) ui.asrConfig.open = true;
+
+  if (!silent) ui.source.focus();
 }
 
 /* ---------- 事件绑定 ---------- */
@@ -393,6 +572,10 @@ function bindEvents() {
   });
 
   ui.addBtn.addEventListener('click', addRule);
+
+  for (const tab of ui.addTabs) {
+    tab.addEventListener('click', () => setAddKind(tab.dataset.kind));
+  }
 
   [ui.source, ui.target].forEach((input) => {
     input.addEventListener('keydown', (e) => {
@@ -413,8 +596,10 @@ function bindEvents() {
       return;
     }
 
-    if (e.target.closest('.pick-btn')) {
-      pickTarget(id);
+    const pickBtn = e.target.closest('.pick-btn');
+    if (pickBtn) {
+      const rule = rules.find((r) => r.id === id);
+      pickField(id, pickBtn.dataset.field === 'source' ? 'source' : 'target', ruleKind(rule));
     }
   });
 
@@ -450,6 +635,18 @@ function bindEvents() {
     updateRowCount(row, rule);
     saveNow();
     scheduleStats();
+  });
+
+  for (const input of [ui.asrAppId, ui.asrSecretId, ui.asrSecretKey]) {
+    input.addEventListener('input', scheduleAsrSave);
+    input.addEventListener('change', saveAsrConfig);
+  }
+  ui.asrEngine.addEventListener('change', saveAsrConfig);
+
+  // 关闭弹窗时把尚未落盘的修改补存一次
+  window.addEventListener('pagehide', () => {
+    if (saveTimer) saveNow();
+    if (asrTimer) saveAsrConfig();
   });
 }
 

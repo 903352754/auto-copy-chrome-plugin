@@ -12,7 +12,7 @@
       <span class="logo">⧉</span>
       <div class="brand-text">
         <h1>快速复制</h1>
-        <p>指定输入框 → 一键填入目标</p>
+        <p>输入框复制 · 音频转写填入</p>
       </div>
     </div>
     <label class="switch master" title="启用 / 停用插件">
@@ -22,9 +22,13 @@
   </header>
 
   <section class="add">
+    <div class="kind-tabs" role="tablist" aria-label="规则类型">
+      <button type="button" class="kind-tab active" data-kind="input" role="tab">快速复制</button>
+      <button type="button" class="kind-tab" data-kind="audio" role="tab">识别语音</button>
+    </div>
     <div class="add-fields">
-      <input id="new-source" type="text" placeholder="源类名，如 price-input" spellcheck="false" autocomplete="off">
-      <input id="new-target" type="text" placeholder="目标选择器，如 #remark 或 .note-input" spellcheck="false" autocomplete="off">
+      <input id="new-source" type="text" placeholder="源 XPath，如 //input[@class='price-input']" spellcheck="false" autocomplete="off">
+      <input id="new-target" type="text" placeholder="目标 XPath，如 //textarea[@id='remark']" spellcheck="false" autocomplete="off">
     </div>
     <button id="add-btn" type="button" class="primary">＋ 添加规则</button>
   </section>
@@ -36,8 +40,43 @@
 
   <div id="list" class="list"></div>
 
+  <details id="asr-config" class="asr-config">
+    <summary>
+      <span class="asr-title">腾讯云语音识别配置</span>
+      <span id="asr-status" class="asr-status off">未配置</span>
+    </summary>
+    <div class="asr-body">
+      <div class="asr-field">
+        <label for="asr-appid">AppID</label>
+        <input id="asr-appid" type="text" placeholder="腾讯云 AppID" spellcheck="false" autocomplete="off">
+      </div>
+      <div class="asr-field">
+        <label for="asr-secretid">SecretID</label>
+        <input id="asr-secretid" type="text" placeholder="访问管理里的 SecretId" spellcheck="false" autocomplete="off">
+      </div>
+      <div class="asr-field">
+        <label for="asr-secretkey">SecretKey</label>
+        <input id="asr-secretkey" type="password" placeholder="访问管理里的 SecretKey" autocomplete="new-password">
+      </div>
+      <div class="asr-field">
+        <label for="asr-engine">引擎</label>
+        <select id="asr-engine">
+          <option value="16k_zh">16k_zh（中文通用，默认）</option>
+          <option value="8k_zh">8k_zh（中文电话通用）</option>
+          <option value="16k_zh_en">16k_zh_en（中英粤 + 方言大模型）</option>
+          <option value="16k_multi_lang">16k_multi_lang（多语种大模型）</option>
+          <option value="16k_yue">16k_yue（粤语）</option>
+          <option value="16k_en">16k_en（英语）</option>
+        </select>
+      </div>
+      <p class="asr-tip">
+        密钥只保存在本机浏览器，由插件后台直接请求腾讯云。建议使用仅授权「语音识别」的腾讯云子账号密钥。
+      </p>
+    </div>
+  </details>
+
   <p class="foot">
-    源可填纯类名（推荐）或任意 CSS 选择器。修改会自动保存；点「拾取」可直接在网页上点选目标输入框。
+    源和目标都使用 XPath。可以先添加规则，再点字段右侧的「拾取」直接在网页上点选输入框或 audio 播放器。
   </p>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
