@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>快速复制助手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="header">
+    <div class="brand">
+      <span class="logo">⧉</span>
+      <div class="brand-text">
+        <h1>快速复制</h1>
+        <p>指定输入框 → 一键填入目标</p>
+      </div>
+    </div>
+    <label class="switch master" title="启用 / 停用插件">
+      <input type="checkbox" id="master">
+      <span class="slider"></span>
+    </label>
+  </header>
+
+  <section class="add">
+    <div class="add-fields">
+      <input id="new-source" type="text" placeholder="源类名，如 price-input" spellcheck="false" autocomplete="off">
+      <input id="new-target" type="text" placeholder="目标选择器，如 #remark 或 .note-input" spellcheck="false" autocomplete="off">
+    </div>
+    <button id="add-btn" type="button" class="primary">＋ 添加规则</button>
+  </section>
+
+  <div class="list-head">
+    <span>规则列表</span>
+    <span id="stat-summary" class="stat-summary"></span>
+  </div>
+
+  <div id="list" class="list"></div>
+
+  <p class="foot">
+    源可填纯类名（推荐）或任意 CSS 选择器。修改会自动保存；点「拾取」可直接在网页上点选目标输入框。
+  </p>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

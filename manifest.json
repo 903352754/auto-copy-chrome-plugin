@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "快速复制助手",
+  "version": "1.0.0",
+  "description": "在指定类名的输入框下方显示「快速复制」按钮，一键把内容填入你指定的目标输入框。",
+  "permissions": ["storage", "activeTab", "clipboardWrite"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "快速复制助手"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
