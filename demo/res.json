@@ -1,0 +1,117 @@
+{
+  "text": "我想要订购一个小米SU7，请问你们还有库存吗？",
+  "timestamps": [
+    {
+      "token": "我",
+      "start": 0.84,
+      "end": 0.9
+    },
+    {
+      "token": "想",
+      "start": 1.02,
+      "end": 1.08
+    },
+    {
+      "token": "要",
+      "start": 1.2,
+      "end": 1.26
+    },
+    {
+      "token": "订",
+      "start": 1.38,
+      "end": 1.44
+    },
+    {
+      "token": "购",
+      "start": 1.56,
+      "end": 1.62
+    },
+    {
+      "token": "一",
+      "start": 1.74,
+      "end": 1.8
+    },
+    {
+      "token": "个",
+      "start": 1.86,
+      "end": 1.92
+    },
+    {
+      "token": "小",
+      "start": 2.28,
+      "end": 2.34
+    },
+    {
+      "token": "米",
+      "start": 2.46,
+      "end": 2.52
+    },
+    {
+      "token": "SU",
+      "start": 2.64,
+      "end": 2.7
+    },
+    {
+      "token": "7",
+      "start": 2.76,
+      "end": 2.82
+    },
+    {
+      "token": "，",
+      "start": 2.82,
+      "end": 2.82
+    },
+    {
+      "token": "请",
+      "start": 3.42,
+      "end": 3.48
+    },
+    {
+      "token": "问",
+      "start": 3.6,
+      "end": 3.66
+    },
+    {
+      "token": "你",
+      "start": 3.84,
+      "end": 3.9
+    },
+    {
+      "token": "们",
+      "start": 3.96,
+      "end": 4.02
+    },
+    {
+      "token": "还",
+      "start": 4.14,
+      "end": 4.2
+    },
+    {
+      "token": "有",
+      "start": 4.26,
+      "end": 4.32
+    },
+    {
+      "token": "库",
+      "start": 4.44,
+      "end": 4.5
+    },
+    {
+      "token": "存",
+      "start": 4.56,
+      "end": 4.62
+    },
+    {
+      "token": "吗",
+      "start": 4.8,
+      "end": 4.86
+    },
+    {
+      "token": "？",
+      "start": 5.28,
+      "end": 5.34
+    }
+  ],
+  "filename": "1.wav",
+  "elapsed": 0.536
+}

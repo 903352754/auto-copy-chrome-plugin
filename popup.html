@@ -3,80 +3,60 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>快速复制助手</title>
+  <title>语音识别助手</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <header class="header">
     <div class="brand">
-      <span class="logo">⧉</span>
+      <span class="logo">🎙</span>
       <div class="brand-text">
-        <h1>快速复制</h1>
-        <p>输入框复制 · 音频转写填入</p>
+        <h1>语音识别助手</h1>
+        <p>页面 audio 一键提交识别</p>
       </div>
     </div>
     <label class="switch master" title="启用 / 停用插件">
-      <input type="checkbox" id="master">
+      <input type="checkbox" id="enabled">
       <span class="slider"></span>
     </label>
   </header>
 
-  <section class="add">
-    <div class="kind-tabs" role="tablist" aria-label="规则类型">
-      <button type="button" class="kind-tab active" data-kind="input" role="tab">快速复制</button>
-      <button type="button" class="kind-tab" data-kind="audio" role="tab">识别语音</button>
+  <section class="card status-card">
+    <div class="status-line">
+      <span id="page-stat" class="page-stat">正在检测当前页面…</span>
+      <button id="rescan" type="button" class="ghost">重新检测</button>
     </div>
-    <div class="add-fields">
-      <input id="new-source" type="text" placeholder="源 XPath，如 //input[@class='price-input']" spellcheck="false" autocomplete="off">
-      <input id="new-target" type="text" placeholder="目标 XPath，如 //textarea[@id='remark']" spellcheck="false" autocomplete="off">
-    </div>
-    <button id="add-btn" type="button" class="primary">＋ 添加规则</button>
+    <p id="page-hint" class="page-hint"></p>
   </section>
 
-  <div class="list-head">
-    <span>规则列表</span>
-    <span id="stat-summary" class="stat-summary"></span>
-  </div>
+  <section class="card">
+    <h2>接口设置</h2>
 
-  <div id="list" class="list"></div>
-
-  <details id="asr-config" class="asr-config">
-    <summary>
-      <span class="asr-title">腾讯云语音识别配置</span>
-      <span id="asr-status" class="asr-status off">未配置</span>
-    </summary>
-    <div class="asr-body">
-      <div class="asr-field">
-        <label for="asr-appid">AppID</label>
-        <input id="asr-appid" type="text" placeholder="腾讯云 AppID" spellcheck="false" autocomplete="off">
-      </div>
-      <div class="asr-field">
-        <label for="asr-secretid">SecretID</label>
-        <input id="asr-secretid" type="text" placeholder="访问管理里的 SecretId" spellcheck="false" autocomplete="off">
-      </div>
-      <div class="asr-field">
-        <label for="asr-secretkey">SecretKey</label>
-        <input id="asr-secretkey" type="password" placeholder="访问管理里的 SecretKey" autocomplete="new-password">
-      </div>
-      <div class="asr-field">
-        <label for="asr-engine">引擎</label>
-        <select id="asr-engine">
-          <option value="16k_zh">16k_zh（中文通用，默认）</option>
-          <option value="8k_zh">8k_zh（中文电话通用）</option>
-          <option value="16k_zh_en">16k_zh_en（中英粤 + 方言大模型）</option>
-          <option value="16k_multi_lang">16k_multi_lang（多语种大模型）</option>
-          <option value="16k_yue">16k_yue（粤语）</option>
-          <option value="16k_en">16k_en（英语）</option>
-        </select>
-      </div>
-      <p class="asr-tip">
-        密钥只保存在本机浏览器，由插件后台直接请求腾讯云。建议使用仅授权「语音识别」的腾讯云子账号密钥。
-      </p>
+    <div class="field">
+      <label for="endpoint">接口地址</label>
+      <input id="endpoint" type="url" placeholder="http://localhost:8000/api/asr" spellcheck="false" autocomplete="off">
     </div>
-  </details>
+
+    <div class="field">
+      <label for="field-name">文件字段名</label>
+      <input id="field-name" type="text" value="file" placeholder="file" spellcheck="false" autocomplete="off">
+    </div>
+
+    <div class="request-preview">
+      <div class="preview-title">点击按钮时发送的请求</div>
+      <pre id="request-preview">POST &lt;接口地址&gt;
+Content-Type: multipart/form-data
+file=&lt;音频文件&gt;</pre>
+    </div>
+
+    <p class="tip">
+      按钮会出现在每个 audio 播放器下方。点击后插件取播放源文件，以 <code>file</code> 字段 POST 到上面的地址，
+      接口返回的文本会追加显示在播放器下方。请求由插件后台发出，不受页面跨域限制。
+    </p>
+  </section>
 
   <p class="foot">
-    源和目标都使用 XPath。可以先添加规则，再点字段右侧的「拾取」直接在网页上点选输入框或 audio 播放器。
+    接口地址与字段名只保存在本机（chrome.storage.local），不会同步到其他设备。
   </p>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

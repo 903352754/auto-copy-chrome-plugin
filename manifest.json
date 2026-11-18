@@ -1,16 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "快速复制助手",
-  "version": "1.2.0",
-  "description": "在指定 XPath 的输入框下方显示「快速复制」按钮，在 audio 标签下方显示「识别语音」按钮，一键填入目标输入框。",
-  "permissions": ["storage", "activeTab", "clipboardWrite"],
+  "name": "语音识别助手",
+  "version": "2.0.0",
+  "description": "自动识别页面中的 audio 播放器，在播放器下方添加「语音识别」按钮，点击后把音频文件提交到指定接口并展示返回结果。",
+  "permissions": ["storage", "activeTab"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "快速复制助手"
+    "default_title": "语音识别助手"
   },
   "content_scripts": [
     {

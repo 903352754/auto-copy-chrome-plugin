@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>快速复制助手 · 测试页</title>
+  <title>语音识别助手 · 测试页</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -18,7 +18,7 @@
       margin: 0 auto;
     }
     h1 { font-size: 22px; margin: 0 0 6px; }
-    .sub { color: #64748b; margin: 0 0 24px; font-size: 13px; }
+    .sub { color: #64748b; margin: 0 0 24px; font-size: 13px; line-height: 1.7; }
     .card {
       background: #fff;
       border: 1px solid #e2e8f0;
@@ -29,36 +29,19 @@
     }
     .card h2 { font-size: 14px; margin: 0 0 12px; color: #334155; }
     label { display: block; font-size: 12px; color: #64748b; margin: 12px 0 4px; }
-    input, textarea {
-      width: 100%;
-      padding: 9px 11px;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      font: inherit;
-      font-size: 14px;
-      outline: none;
-      background: #fff;
-    }
-    input:focus, textarea:focus {
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-    }
-    textarea { min-height: 80px; resize: vertical; }
-    audio { width: 100%; margin-top: 4px; margin-bottom: 28px; }
-    .row { display: flex; gap: 12px; }
-    .row > div { flex: 1; }
+    audio { width: 100%; margin-top: 4px; }
     .hint {
       margin: 16px 0 0;
       padding: 12px 14px;
       border-radius: 10px;
-      background: #eff6ff;
-      border: 1px solid #bfdbfe;
-      color: #1e40af;
+      background: #f5f3ff;
+      border: 1px solid #ddd6fe;
+      color: #5b21b6;
       font-size: 12px;
       line-height: 1.7;
     }
     .hint code {
-      background: #dbeafe;
+      background: #ede9fe;
       padding: 1px 5px;
       border-radius: 4px;
       font-size: 12px;
@@ -72,60 +55,50 @@
       font-size: 13px;
       cursor: pointer;
     }
-    button.demo:hover { border-color: #3b82f6; color: #1d4ed8; }
+    button.demo:hover { border-color: #8b5cf6; color: #6d28d9; }
   </style>
 </head>
 <body>
   <main>
-    <h1>快速复制助手 · 测试页</h1>
-    <p class="sub">安装插件后，在弹窗中添加下面的 XPath 即可看到「快速复制」或「识别语音」按钮。</p>
+    <h1>语音识别助手 · 测试页</h1>
+    <p class="sub">
+      安装插件后，页面中每个 <code>&lt;audio&gt;</code> 播放器下方都会自动出现「语音识别」按钮。
+      先在插件弹窗里填写接口地址，再点击按钮即可把音频提交到接口，返回内容会显示在播放器下方。
+    </p>
 
     <div class="card">
-      <h2>示例 1：源 XPath → 目标 XPath</h2>
-
-      <div class="row">
-        <div>
-          <label>商品名称</label>
-          <input type="text" value="机械键盘">
-        </div>
-        <div>
-          <label>价格（带 price-input 类名）</label>
-          <input type="text" class="price-input" value="¥ 399.00">
-        </div>
-      </div>
-
-      <label>备注（id = remark，目标输入框）</label>
-      <textarea id="remark" placeholder="点击价格下方的「快速复制」后会填入这里"></textarea>
-
+      <h2>示例 1：MP3 播放器</h2>
+      <label>tts-mimo_default-1794368687440.mp3</label>
+      <audio src="tts-mimo_default-1794368687440.mp3" controls></audio>
       <div class="hint">
-        在插件里添加规则：源填 <code>//input[@class="price-input"]</code>，目标填 <code>//textarea[@id="remark"]</code>，然后在价格输入框下方点击「快速复制」。
+        点击播放器下方的「语音识别」，插件会把该 mp3 文件以 <code>file</code> 字段 POST 到接口。
+        接口若返回带 <code>timestamps</code> 的 JSON（参考 <code>demo/res.json</code>），结果区会以表格展示逐词时间轴。
       </div>
     </div>
 
     <div class="card">
-      <h2>示例 2：动态出现的输入框</h2>
-      <p class="sub" style="margin-bottom:12px">用来验证插件能识别页面加载后新增的元素。</p>
-      <button class="demo" type="button" id="add-field">+ 动态添加一个输入框</button>
+      <h2>示例 2：WAV 播放器</h2>
+      <label>tts-mimo_default-1794368668492.wav</label>
+      <audio src="tts-mimo_default-1794368668492.wav" controls></audio>
+    </div>
+
+    <div class="card">
+      <h2>示例 3：使用 &lt;source&gt; 的播放器</h2>
+      <label>音频地址写在 source 子标签里</label>
+      <audio controls>
+        <source src="1.wav" type="audio/mpeg">
+        您的浏览器不支持 audio 标签。
+      </audio>
+      <div class="hint">
+        插件会依次尝试 <code>currentSrc</code>、<code>src</code> 和 <code>&lt;source src&gt;</code>，自动找到实际播放源。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>示例 4：动态添加的播放器</h2>
+      <p class="sub" style="margin-bottom:12px">用来验证页面加载后新增的 audio 也能自动注入按钮。</p>
+      <button class="demo" type="button" id="add-audio">+ 动态添加一个播放器</button>
       <div id="dynamic-wrap"></div>
-      <label for="dynamic-target">动态目标输入框（id = dynamic-target）</label>
-      <input type="text" id="dynamic-target" placeholder="动态内容会填到这里">
-      <div class="hint">
-        源 XPath 填 <code>//input[@class="dynamic-input"]</code>，目标 XPath 填 <code>//input[@id="dynamic-target"]</code>。
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>示例 3：audio 播放器 → 语音识别填入</h2>
-      <p class="sub" style="margin-bottom:12px">
-        先在弹窗的「腾讯云语音识别配置」里填写 AppID / SecretID / SecretKey。
-      </p>
-      <label>待识别音频（id = speech-player）</label>
-      <audio id="speech-player" src="tts-mimo_default-1794368687440.mp3" controls></audio>
-      <label for="asr-result">识别结果（id = asr-result）</label>
-      <textarea id="asr-result" placeholder="点击音频下方的「识别语音」后会填入这里"></textarea>
-      <div class="hint">
-        在弹窗里切到「识别语音」：源填 <code>//audio[@id="speech-player"]</code>，目标填 <code>//textarea[@id="asr-result"]</code>。
-      </div>
     </div>
   </main>
 
@@ -133,18 +106,19 @@
     const wrap = document.getElementById('dynamic-wrap');
     let n = 0;
 
-    document.getElementById('add-field').addEventListener('click', () => {
+    document.getElementById('add-audio').addEventListener('click', () => {
       n += 1;
-      const label = document.createElement('label');
-      label.textContent = '动态输入框 ' + n + '（带 dynamic-input 类名）';
 
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'dynamic-input';
-      input.value = '动态内容 ' + n;
+      const label = document.createElement('label');
+      label.textContent = '动态播放器 ' + n;
+
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.src = 'tts-mimo_default-1794368687440.mp3';
 
       const box = document.createElement('div');
-      box.append(label, input);
+      box.style.marginTop = '14px';
+      box.append(label, audio);
       wrap.appendChild(box);
     });
   </script>

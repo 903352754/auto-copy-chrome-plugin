@@ -1,19 +1,40 @@
 'use strict';
 
-/* 快速复制助手 —— 后台服务
- * 负责调用腾讯云「录音文件识别极速版」接口：
- * POST https://asr.cloud.tencent.com/asr/flash/v1/<appid>?...
- * 由后台发起请求，避免网页 CORS 限制，也避免把密钥暴露给页面脚本。
+/* 语音识别助手 —— 后台服务
+ * 1. 下载页面音频（http/https 由后台直接下载，可携带页面 Cookie；blob:/data: 由内容脚本读取后转交）
+ * 2. 以 multipart/form-data 的 file 字段 POST 到用户配置的接口
+ * 3. 从响应里取出可读文本和逐词时间戳（timestamps）返回给内容脚本
+ *
+ * 由后台发起请求，避免页面 CORS 限制，也让接口地址 / 密钥只留在插件里。
  */
 
-const CONFIG_KEY = 'qc_asr_config';
-const API_HOST = 'asr.cloud.tencent.com';
+const SETTINGS_KEY = 'asr_settings';
 const MAX_AUDIO_BYTES = 100 * 1024 * 1024;
-const SUPPORTED_FORMATS = new Set([
-  'wav', 'pcm', 'ogg-opus', 'speex', 'silk', 'mp3', 'm4a', 'aac', 'amr'
-]);
+const MAX_RESPONSE_TEXT = 1024 * 1024;
+const MAX_TIMESTAMP_ROWS = 2000;
+const FETCH_TIMEOUT = 60000;
+const REQUEST_TIMEOUT = 180000;
 
-const FORMAT_BY_MIME = {
+/* 时间戳数组常见的字段名，按顺序尝试 */
+const TIMESTAMP_KEYS = ['timestamps', 'timestamp', 'words', 'tokens', 'segments', 'items'];
+
+const MIME_BY_EXT = {
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  mp4: 'audio/mp4',
+  aac: 'audio/aac',
+  amr: 'audio/amr',
+  ogg: 'audio/ogg',
+  opus: 'audio/opus',
+  flac: 'audio/flac',
+  webm: 'audio/webm',
+  pcm: 'audio/pcm',
+  silk: 'audio/silk',
+  speex: 'audio/speex'
+};
+
+const EXT_BY_MIME = {
   'audio/mpeg': 'mp3',
   'audio/mp3': 'mp3',
   'audio/wav': 'wav',
@@ -25,48 +46,32 @@ const FORMAT_BY_MIME = {
   'audio/aac': 'aac',
   'audio/aacp': 'aac',
   'audio/amr': 'amr',
-  'audio/ogg': 'ogg-opus',
-  'audio/opus': 'ogg-opus',
+  'audio/ogg': 'ogg',
+  'audio/opus': 'opus',
+  'audio/flac': 'flac',
+  'audio/webm': 'webm',
   'audio/pcm': 'pcm',
   'audio/silk': 'silk',
   'audio/speex': 'speex'
 };
 
-const FORMAT_BY_EXT = {
-  mp3: 'mp3',
-  wav: 'wav',
-  wave: 'wav',
-  m4a: 'm4a',
-  mp4: 'm4a',
-  aac: 'aac',
-  amr: 'amr',
-  ogg: 'ogg-opus',
-  opus: 'ogg-opus',
-  pcm: 'pcm',
-  silk: 'silk',
-  speex: 'speex'
-};
-
-const API_HINTS = {
-  4001: '请检查请求参数',
-  4002: '请检查 AppID / SecretID / SecretKey 是否正确',
-  4003: '请先在腾讯云控制台开通语音识别服务',
-  4004: '资源包已耗尽，请购买资源包或开通后付费',
-  4005: '账户欠费，请充值后重试',
-  4006: '并发超限，请稍后重试',
-  4007: '音频解码失败，请确认音频格式与参数一致',
-  4008: '音频上传超时，请检查网络后重试',
-  4009: '连接已断开，请重新识别',
-  4010: '请求内容无法识别，请重试',
-  4011: '音频数据太大',
-  4012: '音频数据为空',
-  5001: '服务繁忙，请重试',
-  5002: '识别失败，请重试',
-  5003: '识别超时，请重试'
-};
+/* 常见的「文本字段」命名，按顺序尝试 */
+const TEXT_KEYS = [
+  'text',
+  'transcript',
+  'transcription',
+  'asr_text',
+  'asrText',
+  'sentence',
+  'result',
+  'content',
+  'data',
+  'message',
+  'msg'
+];
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (!msg || typeof msg !== 'object' || msg.type !== 'QC_ASR_RECOGNIZE') return;
+  if (!msg || typeof msg !== 'object' || msg.type !== 'ASR_RECOGNIZE') return;
 
   recognize(msg)
     .then((result) => sendResponse(result))
@@ -82,17 +87,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 async function recognize(msg) {
-  const config = await getConfig();
-  const missing = [];
-  if (!config.appId) missing.push('AppID');
-  if (!config.secretId) missing.push('SecretID');
-  if (!config.secretKey) missing.push('SecretKey');
-  if (missing.length) {
-    return {
-      ok: false,
-      stage: 'config',
-      error: '请先在插件中填写腾讯云语音识别的 ' + missing.join(' / ')
-    };
+  const settings = await getSettings();
+  const endpoint = String(settings.endpoint || '').trim();
+
+  if (!endpoint) {
+    return { ok: false, stage: 'config', error: '请先点击插件图标填写接口地址' };
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(endpoint);
+  } catch (e) {
+    return { ok: false, stage: 'config', error: '接口地址格式不正确：' + endpoint };
+  }
+
+  if (!/^https?:$/i.test(parsed.protocol)) {
+    return { ok: false, stage: 'config', error: '接口地址需要以 http:// 或 https:// 开头' };
   }
 
   let bytes = null;
@@ -105,15 +115,16 @@ async function recognize(msg) {
     } catch (e) {
       return { ok: false, stage: 'audio', error: '音频数据解析失败' };
     }
-    mime = msg.mime || '';
+    mime = String(msg.mime || '');
   } else {
     url = String(msg.url || '').trim();
     if (!url) return { ok: false, stage: 'audio', error: '未找到音频地址' };
-    if (!/^https?:|^file:|^blob:|^data:/i.test(url)) {
-      return { ok: false, stage: 'audio', error: '音频地址不受支持' };
-    }
+
     if (/^blob:|^data:/i.test(url)) {
-      return { ok: false, stage: 'audio', error: '该音频只能在页面内读取，请重试' };
+      return { ok: false, stage: 'inline', error: '该音频需要在页面内读取' };
+    }
+    if (!/^https?:/i.test(url)) {
+      return { ok: false, stage: 'audio', error: '音频地址不受支持：' + url };
     }
 
     const fetched = await fetchAudio(url);
@@ -126,72 +137,56 @@ async function recognize(msg) {
     return { ok: false, stage: 'audio', error: '音频内容为空' };
   }
   if (bytes.length > MAX_AUDIO_BYTES) {
-    return { ok: false, stage: 'audio', error: '音频超过 100MB 限制' };
+    return { ok: false, stage: 'audio', error: '音频超过 100MB，无法上传' };
   }
 
-  let format = String(msg.format || '').toLowerCase();
-  if (format === 'ogg') format = 'ogg-opus';
-  if (!SUPPORTED_FORMATS.has(format)) format = detectFormat(url, mime);
-  if (!format) {
-    return {
-      ok: false,
-      stage: 'format',
-      error: '无法判断音频格式，请使用 wav / mp3 / m4a / aac / amr / ogg-opus 等格式'
-    };
-  }
+  const meta = resolveFileMeta(url, mime, msg.filename);
+  const fieldName = String(settings.fieldName || 'file').trim() || 'file';
 
-  const timestamp = Math.floor(Date.now() / 1000);
-  const params = {
-    appid: config.appId,
-    secretid: config.secretId,
-    engine_type: config.engineType || '16k_zh',
-    voice_format: format,
-    timestamp,
-    convert_num_mode: 1,
-    first_channel_only: 1,
-    filter_dirty: 0,
-    filter_modal: 0,
-    filter_punc: 0,
-    speaker_diarization: 0,
-    word_info: 0
-  };
-
-  const path = '/asr/flash/v1/' + encodeURIComponent(config.appId);
-  const query = Object.keys(params)
-    .sort()
-    .map((key) => key + '=' + encodeURIComponent(params[key]))
-    .join('&');
-
-  let signature;
+  let body;
   try {
-    signature = await signRequest('POST' + API_HOST + path + '?' + query, config.secretKey);
+    const form = new FormData();
+    form.append(fieldName, new Blob([bytes], { type: meta.mime }), meta.filename);
+    body = form;
   } catch (e) {
-    return { ok: false, stage: 'sign', error: '生成签名失败：' + (e && e.message ? e.message : e) };
+    return { ok: false, stage: 'request', error: '构造上传数据失败：' + (e && e.message ? e.message : e) };
   }
 
   let response;
   try {
     response = await fetchWithTimeout(
-      'https://' + API_HOST + path + '?' + query,
+      endpoint,
       {
         method: 'POST',
-        headers: {
-          Authorization: signature,
-          'Content-Type': 'application/octet-stream'
-        },
-        body: bytes
+        body,
+        credentials: 'include'
       },
-      120000
+      REQUEST_TIMEOUT
     );
   } catch (e) {
     return {
       ok: false,
       stage: 'request',
-      error: '请求腾讯云失败：' + (e && e.message ? e.message : e)
+      error: '请求识别接口失败：' + (e && e.message ? e.message : e)
     };
   }
 
-  const raw = await response.text();
+  let raw = '';
+  try {
+    raw = await response.text();
+  } catch (e) {
+    return {
+      ok: false,
+      stage: 'request',
+      status: response.status,
+      error: '读取接口返回内容失败（HTTP ' + response.status + '）'
+    };
+  }
+
+  if (raw.length > MAX_RESPONSE_TEXT) {
+    raw = raw.slice(0, MAX_RESPONSE_TEXT) + '\n…（返回内容过长，已截断）';
+  }
+
   let data = null;
   try {
     data = JSON.parse(raw);
@@ -199,48 +194,32 @@ async function recognize(msg) {
     data = null;
   }
 
-  if (!data) {
-    return {
-      ok: false,
-      stage: 'request',
-      error: '腾讯云返回内容无法解析（HTTP ' + response.status + '）'
-    };
-  }
+  const text = data === null ? raw.trim() : extractText(data);
 
-  if (Number(data.code) !== 0) {
-    const code = data.code;
-    const hint = API_HINTS[Number(code)] || '';
+  if (!response.ok) {
+    const detail = text || raw.trim().slice(0, 300);
     return {
       ok: false,
       stage: 'api',
-      code,
-      requestId: data.request_id || '',
-      error:
-        '识别失败（' + code + '）' +
-        (data.message ? '：' + data.message : '') +
-        (hint ? '。' + hint : '')
+      status: response.status,
+      error: '接口返回 HTTP ' + response.status + (detail ? '：' + detail : ''),
+      raw
     };
-  }
-
-  const results = Array.isArray(data.flash_result) ? data.flash_result : [];
-  const text = results
-    .map((item) => (item && item.text ? String(item.text).trim() : ''))
-    .filter(Boolean)
-    .join('\n');
-
-  if (!text) {
-    return { ok: false, stage: 'api', error: '识别完成，但没有返回文字内容' };
   }
 
   return {
     ok: true,
+    status: response.status,
     text,
-    duration: data.audio_duration || 0,
-    requestId: data.request_id || ''
+    timestamps: normalizeTimestamps(findTimestampList(data)),
+    filename: pickField(data, ['filename', 'file_name', 'file']) || '',
+    apiElapsed: toSeconds(pickField(data, ['elapsed', 'cost', 'duration'])),
+    raw,
+    json: data !== null
   };
 }
 
-/* ---------- 网络与签名 ---------- */
+/* ---------- 网络 ---------- */
 
 async function fetchAudio(url) {
   let response;
@@ -248,7 +227,7 @@ async function fetchAudio(url) {
     response = await fetchWithTimeout(
       url,
       { credentials: 'include', cache: 'default' },
-      60000
+      FETCH_TIMEOUT
     );
   } catch (e) {
     return { ok: false, error: '下载音频失败：' + (e && e.message ? e.message : e) };
@@ -281,19 +260,6 @@ async function fetchAudio(url) {
   };
 }
 
-async function signRequest(payload, secretKey) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secretKey),
-    { name: 'HMAC', hash: 'SHA-1' },
-    false,
-    ['sign']
-  );
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
-  return bytesToBase64(new Uint8Array(signature));
-}
-
 async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -309,50 +275,171 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
-function detectFormat(url, mime) {
-  const clean = String(mime || '').split(';')[0].trim().toLowerCase();
-  if (FORMAT_BY_MIME[clean]) return FORMAT_BY_MIME[clean];
+function resolveFileMeta(url, mime, filename) {
+  let name = String(filename || '').trim();
 
-  let pathname = '';
-  try {
-    pathname = new URL(url).pathname;
-  } catch (e) {
-    pathname = '';
+  if (!name && url) {
+    try {
+      name = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || '');
+    } catch (e) {
+      name = '';
+    }
   }
 
-  const match = pathname.match(/\.([a-z0-9]+)$/i);
-  if (match && FORMAT_BY_EXT[match[1].toLowerCase()]) {
-    return FORMAT_BY_EXT[match[1].toLowerCase()];
+  const cleanMime = String(mime || '').split(';')[0].trim().toLowerCase();
+
+  let ext = (name.match(/\.([a-z0-9]{1,5})$/i) || [])[1];
+  if (!ext) ext = EXT_BY_MIME[cleanMime] || '';
+  if (!ext) ext = 'bin';
+
+  if (!name) name = 'audio.' + ext;
+  else if (!/\.[a-z0-9]{1,5}$/i.test(name)) name += '.' + ext;
+
+  name = name.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120) || 'audio.' + ext;
+
+  const finalMime = cleanMime || MIME_BY_EXT[ext] || 'application/octet-stream';
+
+  return { filename: name, mime: finalMime };
+}
+
+/* ---------- 响应解析 ---------- */
+
+function extractText(data) {
+  if (data == null) return '';
+  if (typeof data === 'string') return data.trim();
+  if (typeof data !== 'object') return '';
+
+  const seen = new Set();
+
+  function walk(value, depth) {
+    if (value == null || depth > 6) return '';
+    if (typeof value === 'string') return value.trim();
+    if (typeof value !== 'object') return '';
+    if (seen.has(value)) return '';
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      const parts = value.map((item) => walk(item, depth + 1)).filter(Boolean);
+      return parts.join('\n').trim();
+    }
+
+    for (const key of TEXT_KEYS) {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+      const found = walk(value[key], depth + 1);
+      if (found) return found;
+    }
+
+    return '';
   }
 
-  return '';
+  return walk(data, 0);
+}
+
+/* ---------- 时间戳（逐词时间轴） ---------- */
+
+function findTimestampList(value, depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 3) return null;
+
+  if (Array.isArray(value)) {
+    return looksLikeTimestampList(value) ? value : null;
+  }
+
+  for (const key of TIMESTAMP_KEYS) {
+    if (Array.isArray(value[key]) && looksLikeTimestampList(value[key])) return value[key];
+  }
+
+  for (const key of Object.keys(value)) {
+    const child = value[key];
+    if (!child || typeof child !== 'object') continue;
+    const found = findTimestampList(child, depth + 1);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+function looksLikeTimestampList(list) {
+  let hits = 0;
+  for (const item of list.slice(0, 5)) {
+    if (!item || typeof item !== 'object') continue;
+    if (
+      'start' in item || 'begin' in item || 'start_time' in item || 'from' in item ||
+      'end' in item || 'stop' in item || 'end_time' in item || 'to' in item ||
+      'token' in item || 'word' in item
+    ) {
+      hits += 1;
+    }
+  }
+  return hits > 0;
+}
+
+function normalizeTimestamps(list) {
+  if (!Array.isArray(list)) return [];
+
+  const out = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+
+    const rawToken = item.token ?? item.text ?? item.word ?? item.value ?? '';
+    const token = String(rawToken);
+    const start = toSeconds(item.start ?? item.begin ?? item.start_time ?? item.startTime ?? item.from);
+    const end = toSeconds(item.end ?? item.stop ?? item.end_time ?? item.endTime ?? item.to);
+
+    if (!token.trim() && start === null && end === null) continue;
+
+    out.push({ token, start, end });
+    if (out.length >= MAX_TIMESTAMP_ROWS) break;
+  }
+
+  return out;
+}
+
+/* 秒数，支持 0.84 / "0.84" / "00:00:01.234"；无法解析时返回 null */
+function toSeconds(value) {
+  if (value == null || value === '') return null;
+
+  if (typeof value === 'string' && value.includes(':')) {
+    const parts = value.split(':').map((part) => Number(part));
+    if (parts.length && parts.every((part) => Number.isFinite(part))) {
+      return parts.reduce((acc, part) => acc * 60 + part, 0);
+    }
+    return null;
+  }
+
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function pickField(data, keys) {
+  if (!data || typeof data !== 'object') return null;
+
+  for (const key of keys) {
+    if (data[key] != null && data[key] !== '') return data[key];
+  }
+
+  if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+    return pickField(data.data, keys);
+  }
+
+  return null;
 }
 
 /* ---------- 存储与编码 ---------- */
 
-function getConfig() {
+function getSettings() {
   return new Promise((resolve) => {
     try {
-      chrome.storage.local.get(CONFIG_KEY, (data) => {
+      chrome.storage.local.get({ [SETTINGS_KEY]: {} }, (data) => {
         if (chrome.runtime.lastError || !data) {
           resolve({});
           return;
         }
-        resolve(data[CONFIG_KEY] || {});
+        resolve(data[SETTINGS_KEY] || {});
       });
     } catch (e) {
       resolve({});
     }
   });
-}
-
-function bytesToBase64(bytes) {
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
 }
 
 function base64ToBytes(base64) {
